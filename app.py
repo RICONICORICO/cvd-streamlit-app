@@ -35,12 +35,7 @@ CHECKUP_OPTIONS = [
     "Never",
 ]
 
-DIABETES_OPTIONS = [
-    "No",
-    "No, pre-diabetes or borderline diabetes",
-    "Yes",
-    "Yes, but female told only during pregnancy",
-]
+DIABETES_OPTIONS = ["No", "Yes"]
 
 
 @st.cache_resource
@@ -56,7 +51,25 @@ def predict(input_data):
     model, metadata = load_model()
     input_df = pd.DataFrame([input_data], columns=metadata["features"])
     risk_score = model.predict_proba(input_df)[0, 1]
-    return "YES" if risk_score >= metadata["threshold"] else "NO"
+    threshold = metadata["threshold"]
+    prediction = "YES" if risk_score >= threshold else "NO"
+
+    if risk_score >= threshold:
+        risk_group = "Higher CVD risk"
+        action_text = "This profile should be reviewed more carefully in a clinical setting."
+    elif risk_score >= threshold * 0.7:
+        risk_group = "Borderline CVD risk"
+        action_text = "This profile is below the positive threshold but close enough to monitor."
+    else:
+        risk_group = "Lower CVD risk"
+        action_text = "This profile is below the model threshold for predicted CVD."
+
+    return prediction, risk_group, action_text
+
+
+def calculate_bmi(height_cm, weight_kg):
+    height_m = height_cm / 100
+    return weight_kg / (height_m * height_m)
 
 
 st.set_page_config(
@@ -130,6 +143,31 @@ st.markdown(
         color: #5d461d;
         margin-top: 16px;
       }
+      .risk-band {
+        margin-top: 14px;
+        border: 1px solid #dbe5e8;
+        border-radius: 8px;
+        padding: 14px 16px;
+        background: #f8fafb;
+      }
+      .risk-band span {
+        display: block;
+        color: #607078;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .risk-band strong {
+        display: block;
+        font-size: 22px;
+        line-height: 1.2;
+        color: #22313a;
+      }
+      .risk-band p {
+        margin: 8px 0 0;
+        color: #5d6b73;
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -140,7 +178,7 @@ st.markdown(
     <div class="hero">
       <p>Master of Digital Health and Data Science - Datathon Project</p>
       <h1>Cardiovascular Disease Risk Prediction</h1>
-      <p>XGBoost model - reduced 8-feature pipeline - binary output only</p>
+      <p>XGBoost model - reduced feature pipeline - binary output with risk interpretation</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -159,7 +197,27 @@ with left:
         general_health = st.selectbox("General health", GENERAL_HEALTH_OPTIONS, index=2)
         checkup = st.selectbox("Last medical checkup", CHECKUP_OPTIONS, index=0)
 
-    bmi = st.slider("BMI", min_value=12.0, max_value=60.0, value=25.0, step=0.1)
+    col_height, col_weight, col_bmi = st.columns([1, 1, 0.9])
+    with col_height:
+        height_cm = st.number_input(
+            "Height (cm)",
+            min_value=100.0,
+            max_value=230.0,
+            value=170.0,
+            step=0.5,
+        )
+    with col_weight:
+        weight_kg = st.number_input(
+            "Weight (kg)",
+            min_value=30.0,
+            max_value=250.0,
+            value=70.0,
+            step=0.5,
+        )
+
+    bmi = round(calculate_bmi(height_cm, weight_kg), 1)
+    with col_bmi:
+        st.metric("Calculated BMI", f"{bmi:.1f}")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -186,7 +244,7 @@ with right:
     st.subheader("Prediction")
 
     if predict_clicked:
-        result = predict(input_data)
+        result, risk_group, action_text = predict(input_data)
         result_class = "result-yes" if result == "YES" else "result-no"
         result_text = (
             "The model predicts heart disease for this input profile."
@@ -203,6 +261,16 @@ with right:
             """,
             unsafe_allow_html=True,
         )
+        st.markdown(
+            f"""
+            <div class="risk-band">
+              <span>CVD risk calculation</span>
+              <strong>{risk_group}</strong>
+              <p>{action_text}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown(
             """
@@ -210,6 +278,16 @@ with right:
               <span>Heart disease prediction</span>
               <strong style="font-size: 34px; color: #607078;">Waiting</strong>
               <p>Enter the patient features and run the model.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class="risk-band">
+              <span>CVD risk calculation</span>
+              <strong>Waiting</strong>
+              <p>The risk category will appear after prediction.</p>
             </div>
             """,
             unsafe_allow_html=True,
