@@ -52,19 +52,19 @@ def predict(input_data):
     input_df = pd.DataFrame([input_data], columns=metadata["features"])
     risk_score = model.predict_proba(input_df)[0, 1]
     threshold = metadata["threshold"]
-    prediction = "YES" if risk_score >= threshold else "NO"
+    risk_percentage = risk_score * 100
 
     if risk_score >= threshold:
         risk_group = "Higher CVD risk"
-        action_text = "This profile should be reviewed more carefully in a clinical setting."
+        action_text = "This profile has a higher model-estimated cardiovascular risk."
     elif risk_score >= threshold * 0.7:
-        risk_group = "Borderline CVD risk"
-        action_text = "This profile is below the positive threshold but close enough to monitor."
+        risk_group = "Moderate CVD risk"
+        action_text = "This profile is close to the model threshold and may need monitoring."
     else:
         risk_group = "Lower CVD risk"
-        action_text = "This profile is below the model threshold for predicted CVD."
+        action_text = "This profile has a lower model-estimated cardiovascular risk."
 
-    return prediction, risk_group, action_text
+    return risk_percentage, risk_group, action_text
 
 
 def calculate_bmi(height_cm, weight_kg):
@@ -102,6 +102,9 @@ st.markdown(
         color: #5d6b73;
         margin-bottom: 0;
       }
+      .hero h1 {
+        color: #22313a;
+      }
       .result-card {
         border-radius: 8px;
         padding: 24px;
@@ -121,19 +124,25 @@ st.markdown(
         line-height: 1;
         margin-top: 12px;
       }
-      .result-yes {
-        border-color: rgba(199, 85, 67, 0.45);
-        background: #fff1ee;
+      .result-risk {
+        border-color: rgba(31, 101, 130, 0.35);
+        background: #f1f8fb;
       }
-      .result-yes strong {
-        color: #c75543;
+      .result-risk strong {
+        color: #1f6582;
       }
-      .result-no {
-        border-color: rgba(25, 116, 71, 0.4);
-        background: #eef8f2;
+      .percentage-bar {
+        width: 100%;
+        height: 12px;
+        border-radius: 999px;
+        background: #dce9ee;
+        overflow: hidden;
+        margin: 18px 0 12px;
       }
-      .result-no strong {
-        color: #197447;
+      .percentage-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #4f9b73 0%, #d6a038 58%, #c75543 100%);
       }
       .note {
         border-left: 4px solid #b57924;
@@ -178,7 +187,7 @@ st.markdown(
     <div class="hero">
       <p>Master of Digital Health and Data Science - Datathon Project</p>
       <h1>Cardiovascular Disease Risk Prediction</h1>
-      <p>XGBoost model - reduced feature pipeline - binary output with risk interpretation</p>
+      <p>XGBoost model - reduced feature pipeline - risk percentage output</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -244,19 +253,17 @@ with right:
     st.subheader("Prediction")
 
     if predict_clicked:
-        result, risk_group, action_text = predict(input_data)
-        result_class = "result-yes" if result == "YES" else "result-no"
-        result_text = (
-            "The model predicts heart disease for this input profile."
-            if result == "YES"
-            else "The model does not predict heart disease for this input profile."
-        )
+        risk_percentage, risk_group, action_text = predict(input_data)
+        bar_width = min(max(risk_percentage, 0), 100)
         st.markdown(
             f"""
-            <div class="result-card {result_class}">
-              <span>Heart disease prediction</span>
-              <strong>{result}</strong>
-              <p>{result_text}</p>
+            <div class="result-card result-risk">
+              <span>Estimated CVD risk</span>
+              <strong>{risk_percentage:.1f}%</strong>
+              <div class="percentage-bar">
+                <div class="percentage-fill" style="width: {bar_width:.1f}%;"></div>
+              </div>
+              <p>Risk percentage calculated by the trained XGBoost model.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -275,7 +282,7 @@ with right:
         st.markdown(
             """
             <div class="result-card">
-              <span>Heart disease prediction</span>
+              <span>Estimated CVD risk</span>
               <strong style="font-size: 34px; color: #607078;">Waiting</strong>
               <p>Enter the patient features and run the model.</p>
             </div>
@@ -287,7 +294,7 @@ with right:
             <div class="risk-band">
               <span>CVD risk calculation</span>
               <strong>Waiting</strong>
-              <p>The risk category will appear after prediction.</p>
+              <p>The risk percentage and interpretation will appear after prediction.</p>
             </div>
             """,
             unsafe_allow_html=True,
